@@ -1,16 +1,25 @@
 import SwiftUI
 
 struct ContentView: View {
-    // Create the single source of truth for our view's state.
+    // MARK: - Properties
+    
     @StateObject private var viewModel = TimerViewModel()
+    
+    // This @State variable will control whether the settings sheet is visible.
+    @State private var isShowingSettings = false
 
-    // Define the new colors as requested.
     private let focusColor = Color.red.opacity(0.9)
     private let shortBreakColor = Color(red: 135/255, green: 206/255, blue: 235/255) // Sky Blue
     private let longBreakColor = Color(red: 152/255, green: 251/255, blue: 152/255) // Pastel Green
 
-    // This computed property now provides the correct background color.
+    // We update the background color logic to check for dark mode first.
     private var backgroundColor: Color {
+        // If dark mode is enabled, always return black.
+        if viewModel.isDarkModeEnabled {
+            return Color.black
+        }
+        
+        // Otherwise, return the color based on the session type.
         switch viewModel.sessionType {
         case .focus:
             return focusColor
@@ -32,32 +41,42 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Body
     var body: some View {
         ZStack {
-            // The background color animates smoothly between changes.
             backgroundColor
                 .ignoresSafeArea()
                 .animation(.easeInOut, value: viewModel.sessionType)
+                .animation(.easeInOut, value: viewModel.isDarkModeEnabled) // Also animate dark mode change
             
             VStack(spacing: 20) {
                 
-                // MARK: - Session Selection Buttons
+                // MARK: - Top Bar with Settings Button
                 HStack {
-                    Button("Pomodoro") {
-                        viewModel.selectSession(type: .focus)
+                    // This is the container for our session selection buttons.
+                    HStack {
+                        Button("Pomodoro") { viewModel.selectSession(type: .focus) }
+                            .buttonStyle(SessionButtonStyle(isSelected: viewModel.sessionType == .focus))
+                        
+                        Button("Short Rest") { viewModel.selectSession(type: .shortBreak) }
+                            .buttonStyle(SessionButtonStyle(isSelected: viewModel.sessionType == .shortBreak))
+                        
+                        Button("Long Rest") { viewModel.selectSession(type: .longBreak) }
+                            .buttonStyle(SessionButtonStyle(isSelected: viewModel.sessionType == .longBreak))
                     }
-                    .buttonStyle(SessionButtonStyle(isSelected: viewModel.sessionType == .focus))
                     
-                    Button("Short Rest") {
-                        viewModel.selectSession(type: .shortBreak)
-                    }
-                    .buttonStyle(SessionButtonStyle(isSelected: viewModel.sessionType == .shortBreak))
+                    Spacer() // Pushes the settings button to the far right.
                     
-                    Button("Long Rest") {
-                        viewModel.selectSession(type: .longBreak)
+                    // The new settings button.
+                    Button(action: {
+                        isShowingSettings = true // This will present our settings sheet.
+                    }) {
+                        Image(systemName: "line.horizontal.3") // The "3 bar" icon.
+                            .font(.title2)
+                            .foregroundColor(.white)
                     }
-                    .buttonStyle(SessionButtonStyle(isSelected: viewModel.sessionType == .longBreak))
                 }
+                .padding(.horizontal)
                 .padding(.top, 20)
                 
                 Spacer()
@@ -70,7 +89,6 @@ struct ContentView: View {
                 Spacer()
 
                 // MARK: - Control Button
-                // The "Skip" button has been removed, leaving only the Start/Pause button.
                 Button(action: {
                     viewModel.startPause()
                 }) {
@@ -81,14 +99,14 @@ struct ContentView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                     .frame(maxWidth: .infinity)
-                    .padding(.horizontal) // Give some space on the sides
+                    .padding(.horizontal)
                 }
                 .padding()
                 .background(Color.white)
                 .foregroundColor(buttonAccentColor)
                 .cornerRadius(15)
                 .shadow(radius: 5)
-                .padding(.horizontal) // Add horizontal padding to the button itself
+                .padding(.horizontal)
                 
                 // MARK: - Daily Progress
                 Text("Today's Pomodoros: \(viewModel.dailySessionsCompleted)")
@@ -97,10 +115,16 @@ struct ContentView: View {
                     .padding(.bottom, 40)
             }
         }
+        // This modifier presents a "sheet" (a view that slides up from the bottom)
+        // when the `isShowingSettings` variable becomes true.
+        .sheet(isPresented: $isShowingSettings) {
+            // Here we specify which view to show: our new SettingsView.
+            // We pass our viewModel into it so it can read and write the dark mode setting.
+            SettingsView(viewModel: viewModel)
+        }
     }
 }
 
-// Custom styling for the top session buttons
 struct SessionButtonStyle: ButtonStyle {
     let isSelected: Bool
     
@@ -118,8 +142,6 @@ struct SessionButtonStyle: ButtonStyle {
     }
 }
 
-
-// Preview struct remains the same
 #Preview {
     ContentView()
 }

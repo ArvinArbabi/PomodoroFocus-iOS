@@ -2,7 +2,6 @@ import Foundation
 import Combine
 import UserNotifications
 
-// The enum remains the same. We'll rename .focus to Pomodoro in the UI.
 enum SessionType: String {
     case focus = "Pomodoro"
     case shortBreak = "Short Break"
@@ -17,10 +16,20 @@ class TimerViewModel: ObservableObject {
     @Published var timerActive = false
     @Published var dailySessionsCompleted: Int = 0
     
-    // MARK: - Timer Configuration (as per PRD)
-    private let focusDuration: Int = 25 * 60 // 25 minutes
-    private let shortBreakDuration: Int = 5 * 60 // 5 minutes
-    private let longBreakDuration: Int = 15 * 60 // 15 minutes
+    // --- NEW PROPERTY FOR DARK MODE ---
+    // We add a new @Published property to track the dark mode state.
+    @Published var isDarkModeEnabled = false {
+        // This `didSet` block runs automatically whenever isDarkModeEnabled changes.
+        didSet {
+            // We save the new value to UserDefaults so it's remembered next time the app opens.
+            UserDefaults.standard.set(isDarkModeEnabled, forKey: darkModeKey)
+        }
+    }
+
+    // MARK: - Timer Configuration
+    private let focusDuration: Int = 25 * 60
+    private let shortBreakDuration: Int = 5 * 60
+    private let longBreakDuration: Int = 15 * 60
     private let pomodorosPerCycle: Int = 4
     
     // MARK: - Private Properties
@@ -28,14 +37,21 @@ class TimerViewModel: ObservableObject {
     private var totalSeconds: Int = 0
     private var pomodoroCycleCount: Int = 0
     private let userDefaultsKey = "dailySessionsCompleted"
+    private let darkModeKey = "isDarkModeEnabled" // Key for saving dark mode setting.
 
     init() {
         self.totalSeconds = focusDuration
+        
+        // --- LOAD SAVED SETTINGS ---
+        // When the ViewModel is created, we load the saved values.
         loadSessionCount()
+        isDarkModeEnabled = UserDefaults.standard.bool(forKey: darkModeKey)
+        
         updateTimeRemaining()
     }
     
-    // MARK: - Public Control Functions
+    // ... all other functions (startPause, skipSession, selectSession, etc.) remain exactly the same ...
+    
     func startPause() {
         if timerActive {
             pause()
@@ -49,11 +65,9 @@ class TimerViewModel: ObservableObject {
         nextSession()
     }
 
-    // --- NEW FUNCTION ---
-    // This function allows the UI buttons to manually change the session.
     func selectSession(type: SessionType) {
-        pause() // Stop any running timer
-        sessionType = type // Set the new session type
+        pause()
+        sessionType = type
 
         switch type {
         case .focus:
@@ -64,13 +78,11 @@ class TimerViewModel: ObservableObject {
             totalSeconds = longBreakDuration
         }
         
-        updateTimeRemaining() // Update the display immediately
+        updateTimeRemaining()
     }
 
-    // MARK: - Timer Logic
     private func start() {
         timerActive = true
-        // Schedule a timer that fires every second.
         timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
             guard let self = self else { return }
             
@@ -112,14 +124,12 @@ class TimerViewModel: ObservableObject {
         updateTimeRemaining()
     }
     
-    // MARK: - Helper Functions
     private func updateTimeRemaining() {
         let minutes = totalSeconds / 60
         let seconds = totalSeconds % 60
         timeRemaining = String(format: "%02d:%02d", minutes, seconds)
     }
     
-    // MARK: - Data Persistence
     private func saveSessionCount() {
         DispatchQueue.global(qos: .background).async {
             UserDefaults.standard.set(self.dailySessionsCompleted, forKey: self.userDefaultsKey)
@@ -130,7 +140,6 @@ class TimerViewModel: ObservableObject {
         dailySessionsCompleted = UserDefaults.standard.integer(forKey: userDefaultsKey)
     }
     
-    // MARK: - Notification Logic
     private func scheduleNotification() {
         let content = UNMutableNotificationContent()
         content.title = "\(sessionType.rawValue) Complete!"
