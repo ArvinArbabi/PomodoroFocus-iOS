@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import UserNotifications
 
+// ... SessionType enum remains the same ...
 enum SessionType: String {
     case focus = "Pomodoro"
     case shortBreak = "Short Break"
@@ -15,18 +16,22 @@ class TimerViewModel: ObservableObject {
     @Published var timeRemaining: String = "25:00"
     @Published var timerActive = false
     @Published var dailySessionsCompleted: Int = 0
-    
-    // --- NEW PROPERTY FOR DARK MODE ---
-    // We add a new @Published property to track the dark mode state.
     @Published var isDarkModeEnabled = false {
-        // This `didSet` block runs automatically whenever isDarkModeEnabled changes.
         didSet {
-            // We save the new value to UserDefaults so it's remembered next time the app opens.
             UserDefaults.standard.set(isDarkModeEnabled, forKey: darkModeKey)
         }
     }
+    
+    // --- NEW PROPERTY FOR TASKS ---
+    // This will hold our array of tasks. When it changes, the UI will update
+    // and the new array will be saved automatically via the `didSet` block.
+    @Published var tasks: [Task] = [] {
+        didSet {
+            saveTasks()
+        }
+    }
 
-    // MARK: - Timer Configuration
+    // ... Timer Configuration remains the same ...
     private let focusDuration: Int = 25 * 60
     private let shortBreakDuration: Int = 5 * 60
     private let longBreakDuration: Int = 15 * 60
@@ -37,128 +42,70 @@ class TimerViewModel: ObservableObject {
     private var totalSeconds: Int = 0
     private var pomodoroCycleCount: Int = 0
     private let userDefaultsKey = "dailySessionsCompleted"
-    private let darkModeKey = "isDarkModeEnabled" // Key for saving dark mode setting.
+    private let darkModeKey = "isDarkModeEnabled"
+    private let tasksKey = "savedTasks" // Key for saving the tasks array.
 
     init() {
         self.totalSeconds = focusDuration
         
-        // --- LOAD SAVED SETTINGS ---
-        // When the ViewModel is created, we load the saved values.
+        // Load all saved data on startup
         loadSessionCount()
         isDarkModeEnabled = UserDefaults.standard.bool(forKey: darkModeKey)
+        loadTasks() // Load our saved tasks.
         
         updateTimeRemaining()
     }
     
-    // ... all other functions (startPause, skipSession, selectSession, etc.) remain exactly the same ...
+    // MARK: - Task Management Functions
     
-    func startPause() {
-        if timerActive {
-            pause()
-        } else {
-            start()
+    /// Adds a new task to the tasks array.
+    func addTask(name: String, pomodoros: Int) {
+        let newTask = Task(name: name, pomodorosNeeded: pomodoros)
+        tasks.append(newTask)
+    }
+    
+    /// Deletes a specific task from the array.
+    func deleteTask(taskToDelete: Task) {
+        tasks.removeAll { $0.id == taskToDelete.id }
+    }
+    
+    // MARK: - Data Persistence for Tasks
+    
+    /// Encodes the tasks array to JSON data and saves it to UserDefaults.
+    private func saveTasks() {
+        if let encodedData = try? JSONEncoder().encode(tasks) {
+            UserDefaults.standard.set(encodedData, forKey: tasksKey)
         }
     }
     
-    func skipSession() {
-        pause()
-        nextSession()
+    /// Loads and decodes the tasks array from UserDefaults.
+    private func loadTasks() {
+        guard let savedData = UserDefaults.standard.data(forKey: tasksKey),
+              let decodedTasks = try? JSONDecoder().decode([Task].self, from: savedData) else {
+            return
+        }
+        self.tasks = decodedTasks
     }
+    
+    // ... all other functions (startPause, selectSession, etc.) remain exactly the same ...
+    
+    // MARK: - Public Control Functions
+    func startPause() { /* ... no changes ... */ }
+    func skipSession() { /* ... no changes ... */ }
+    func selectSession(type: SessionType) { /* ... no changes ... */ }
+    // MARK: - Timer Logic
+    private func start() { /* ... no changes ... */ }
+    private func pause() { /* ... no changes ... */ }
+    private func nextSession() { /* ... no changes ... */ }
+    // MARK: - Helper Functions
+    private func updateTimeRemaining() { /* ... no changes ... */ }
+    // MARK: - Data Persistence
+    private func saveSessionCount() { /* ... no changes ... */ }
+    private func loadSessionCount() { /* ... no changes ... */ }
+    // MARK: - Notification Logic
+    private func scheduleNotification() { /* ... no changes ... */ }
+    private func cancelNotification() { /* ... no changes ... */ }
 
-    func selectSession(type: SessionType) {
-        pause()
-        sessionType = type
-
-        switch type {
-        case .focus:
-            totalSeconds = focusDuration
-        case .shortBreak:
-            totalSeconds = shortBreakDuration
-        case .longBreak:
-            totalSeconds = longBreakDuration
-        }
-        
-        updateTimeRemaining()
-    }
-
-    private func start() {
-        timerActive = true
-        timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in
-            guard let self = self else { return }
-            
-            if self.totalSeconds > 0 {
-                self.totalSeconds -= 1
-                self.updateTimeRemaining()
-            } else {
-                self.pause()
-                self.nextSession()
-            }
-        }
-        scheduleNotification()
-    }
-    
-    private func pause() {
-        timerActive = false
-        timer?.cancel()
-        cancelNotification()
-    }
-    
-    private func nextSession() {
-        if sessionType == .focus {
-            dailySessionsCompleted += 1
-            pomodoroCycleCount += 1
-            saveSessionCount()
-            
-            if pomodoroCycleCount >= pomodorosPerCycle {
-                sessionType = .longBreak
-                totalSeconds = longBreakDuration
-                pomodoroCycleCount = 0
-            } else {
-                sessionType = .shortBreak
-                totalSeconds = shortBreakDuration
-            }
-        } else {
-            sessionType = .focus
-            totalSeconds = focusDuration
-        }
-        updateTimeRemaining()
-    }
-    
-    private func updateTimeRemaining() {
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        timeRemaining = String(format: "%02d:%02d", minutes, seconds)
-    }
-    
-    private func saveSessionCount() {
-        DispatchQueue.global(qos: .background).async {
-            UserDefaults.standard.set(self.dailySessionsCompleted, forKey: self.userDefaultsKey)
-        }
-    }
-    
-    private func loadSessionCount() {
-        dailySessionsCompleted = UserDefaults.standard.integer(forKey: userDefaultsKey)
-    }
-    
-    private func scheduleNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = "\(sessionType.rawValue) Complete!"
-        content.sound = .default
-        
-        switch sessionType {
-        case .focus:
-            content.body = "Time for a well-deserved break. 👍"
-        case .shortBreak, .longBreak:
-            content.body = "Break's over! Let's get back to it. 💪"
-        }
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: TimeInterval(totalSeconds), repeats: false)
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
-
-        UNUserNotificationCenter.current().add(request)
-    }
-
-    private func cancelNotification() {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-    }
+    // NOTE: To save space, the unchanged functions are collapsed.
+    // In your project, just add the new Task functions and properties to the existing file.
 }
