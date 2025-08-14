@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     // MARK: - Properties
+    
     @StateObject private var viewModel = TimerViewModel()
     
     @State private var isShowingSettings = false
@@ -22,8 +23,6 @@ struct ContentView: View {
         }
     }
     
-    // --- THIS WAS LIKELY ONE SOURCE OF THE ERRORS ---
-    // This computed property needs its full implementation.
     private var buttonAccentColor: Color {
         switch viewModel.sessionType {
         case .focus:
@@ -118,7 +117,9 @@ struct ContentView: View {
                 // Control Button
                 Button(action: { viewModel.startPause() }) {
                     HStack {
+                        // --- THIS IS THE CORRECTED LINE ---
                         Image(systemName: viewModel.timerActive ? "pause.fill" : "play.fill")
+                        
                         Text(viewModel.timerActive ? "Pause" : "Start")
                     }
                     .font(.title2)
@@ -140,6 +141,9 @@ struct ContentView: View {
                     .padding(.bottom, 40)
             }
         }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView(viewModel: viewModel)
+        }
         .sheet(isPresented: $isShowingAddTask) {
             AddTaskView { (name, pomodoros) in
                 viewModel.addTask(name: name, pomodoros: pomodoros)
@@ -156,8 +160,6 @@ struct ContentView: View {
     }
 }
 
-// --- THIS WAS THE OTHER SOURCE OF THE ERRORS ---
-// This custom ButtonStyle needs its full implementation.
 struct SessionButtonStyle: ButtonStyle {
     let isSelected: Bool
     
